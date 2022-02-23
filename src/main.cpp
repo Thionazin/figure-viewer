@@ -24,13 +24,18 @@ GLFWwindow *window; // Main application window
 string RES_DIR = ""; // Where data files live
 shared_ptr<Program> prog;
 shared_ptr<Program> progIM; // immediate mode
+// Shapes used by the program
 shared_ptr<Shape> cube;
 shared_ptr<Shape> teapot;
 shared_ptr<Shape> sphere;
 shared_ptr<Shape> slippers;
+// Root component, parent/grandparent of all. The torso
 shared_ptr<RobotComponent> root;
+// The current component selected. This will change based on the current index of the dfs traversal.
 shared_ptr<RobotComponent> selected;
+// Vector to hold the precomputed dfs order.
 vector<shared_ptr<RobotComponent>> dfs_traversal;
+// Current index of the dfs traversal.
 int dfs_index = 0;
 
 static void error_callback(int error, const char *description)
@@ -38,6 +43,7 @@ static void error_callback(int error, const char *description)
 	cerr << description << endl;
 }
 
+// Support for key input
 static void key_callback(GLFWwindow *window, int key, int scancode, int action, int mods)
 {
 	if(key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
@@ -45,8 +51,11 @@ static void key_callback(GLFWwindow *window, int key, int scancode, int action, 
 	}
 }
 
+// Support for character input
 static void character_callback(GLFWwindow* window, unsigned int codepoint)
 {
+	// finds unicode character int, then based off of that runs functions
+	// These update the angles of the selected components
 	if(codepoint == 88) {
 		selected->updateX(0.05);
 	} else if(codepoint == 120) {
@@ -60,6 +69,7 @@ static void character_callback(GLFWwindow* window, unsigned int codepoint)
 	} else if(codepoint == 122) {
 		selected->updateZ(-0.05);
 	} else if(codepoint == 46) {
+		// goes forward in dfs
 		if(dfs_index != ((int)dfs_traversal.size())-1) {
 			selected->setSelected(false);
 			dfs_index++;
@@ -67,6 +77,7 @@ static void character_callback(GLFWwindow* window, unsigned int codepoint)
 			selected->setSelected(true);
 		}
 	} else if(codepoint == 44) {
+		// goes backwards in dfs
 		if(dfs_index != 0) {
 			selected->setSelected(false);
 			dfs_index--;
@@ -80,8 +91,11 @@ static void character_callback(GLFWwindow* window, unsigned int codepoint)
 // pre computes the dfs traversal only once in the init to increase performance at a slight memory cost.
 static void precompute_dfs_traversal()
 {
+	// Initialize the dfs stack, a stack of shared pointers
 	stack<shared_ptr<RobotComponent>> dfs_store;
+	// push root to begin
 	dfs_store.push(root);
+	// conduct the dfs, pushing and popping until empty
 	while(!dfs_store.empty()) {
 		shared_ptr<RobotComponent> temp = dfs_store.top();
 		dfs_store.pop();
@@ -306,58 +320,15 @@ static void render()
 
 	// Quick calculation for oscillation of scale for selected
 	double t = glfwGetTime();
-	double scale_mult = 1 + 0.05/2 + (0.05/2)*sin(2 * M_PI * 2 * t);
+	double scale_mult = 1 + 0.10/2 + (0.10/2)*sin(2 * M_PI * 2 * t);
 	glm::vec3 scale_multiple(scale_mult, scale_mult, scale_mult);
 	selected->setScaleMult(scale_multiple);
 	
-	// Draw teapot.
+	// Draw robot.
 	prog->bind();
 	root->draw(MV, sphere);
 	glUniformMatrix4fv(prog->getUniform("P"), 1, GL_FALSE, &P->topMatrix()[0][0]);
-	/*
-	MV->pushMatrix();
-	MV->translate(x_mov, y_mov, z_mov);
-	MV->rotate(t, 0.0, 1.0, 0.0);
-	glUniformMatrix4fv(prog->getUniform("P"), 1, GL_FALSE, &P->topMatrix()[0][0]);
-	glUniformMatrix4fv(prog->getUniform("MV"), 1, GL_FALSE, &MV->topMatrix()[0][0]);
-	teapot->draw(prog);
-		MV->pushMatrix();
-		MV->translate(0.0, 0.5, 0.0);
-		MV->rotate(t, 0.0, 1.0, 0.0);
-		//glUniformMatrix4fv(prog->getUniform("P"), 1, GL_FALSE, &P->topMatrix()[0][0]);
-		glUniformMatrix4fv(prog->getUniform("MV"), 1, GL_FALSE, &MV->topMatrix()[0][0]);
-		cube->draw(prog);
-			MV->pushMatrix();
-			MV->translate(0.0, -0.5, 0.0);
-			// MV->rotate(t, 0.0, 1.0, 0.0);
-			//glUniformMatrix4fv(prog->getUniform("P"), 1, GL_FALSE, &P->topMatrix()[0][0]);
-			glUniformMatrix4fv(prog->getUniform("MV"), 1, GL_FALSE, &MV->topMatrix()[0][0]);
-			sphere->draw(prog);
-			MV->popMatrix();
-		MV->popMatrix();
-	MV->popMatrix();
-	*/
 	prog->unbind();
-	// Draw cube.
-	// Draw cube.
-	
-	// Draw lines.
-	/*
-	progIM->bind();
-	MV->pushMatrix();
-	glUniformMatrix4fv(progIM->getUniform("P"), 1, GL_FALSE, &P->topMatrix()[0][0]);
-	glUniformMatrix4fv(progIM->getUniform("MV"), 1, GL_FALSE, &MV->topMatrix()[0][0]);
-	glColor3f(0.0f, 0.0f, 0.0f);
-	glBegin(GL_LINE_STRIP);
-	glVertex3d(-1.0, -1.0, 0.0);
-	glVertex3d( 1.0, -1.0, 0.0);
-	glVertex3d( 1.0,  1.0, 0.0);
-	glVertex3d(-1.0,  1.0, 0.0);
-	glVertex3d(-1.0, -1.0, 0.0);
-	glEnd();
-	MV->popMatrix();
-	progIM->unbind();
-	*/
 
 	// Pop matrix stacks.
 	MV->popMatrix();
@@ -380,11 +351,6 @@ int main(int argc, char **argv)
 	if(!glfwInit()) {
 		return -1;
 	}
-	// https://en.wikipedia.org/wiki/OpenGL
-	// glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
-	// glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
-	// glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-	// glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
 	// Create a windowed mode window and its OpenGL context.
 	window = glfwCreateWindow(640, 480, "Senhe Hao", NULL, NULL);
 	if(!window) {
